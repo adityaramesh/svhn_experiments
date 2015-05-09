@@ -13,8 +13,8 @@ Experiments involving CNNs on the SVHN data set.
 
 Our experiments will involve two architectures:
 
-  1. The [5x5 filter architecture](source/modeles/cnn_5x5.lua).
-  2. The [3x3 filter architecture](source/modeles/cnn_3x3.lua).
+  1. The [5x5 filter architecture](source/models/cnn_5x5.lua).
+  2. The [3x3 filter architecture](source/models/cnn_3x3.lua).
 
 The 5x5 architecture converges relatively quickly, so our results for this model
 should include the validation error *at convergence*. The 3x3 architecture takes
