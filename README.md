@@ -25,7 +25,9 @@ after *30 training epochs*.
 
 ## Getting Started
 
-TODO: how to download data.
+Before attempting to train any models, you must first download the preprocessed
+data files. I should have sent you an email with the URLs of these files, along
+with instructions as to where to put them.
 
 To train a model, use the command
 
@@ -39,6 +41,10 @@ executes, a directory with the name `<model_name>` will be created in `models`.
 terminated (e.g. by Control-C). `replace` *removes* the directory
 `models/<model_name>` and creates everything from scratch.
 
+For example, to train the 5x5 model with the baseline configuration, type
+
+	th source/drivers/svhn_5x5_baseline.lua -task replace -model 5x5_baseline -device 1
+
 All of the model pertaining to your model will be stored in
 `models/<model_name>`. This includes the following:
 
@@ -47,10 +53,6 @@ All of the model pertaining to your model will be stored in
   - The model and optimization state that achieved the best validation error.
   - A CSV file containing the training scores.
   - A CSV file containing the validation scores.
-
-For example, to train the 5x5 model with the baseline configuration, type
-
-	th source/drivers/svhn_5x5_baseline.lua -task replace -model 5x5_baseline -device 1
 
 ## How Driver Scripts Work
 
@@ -62,9 +64,12 @@ function in `source/utilities/run_model.lua` that initiates training.
 
 ## Available Optimization Algorithms
 
-Torch's `optim` package implements all of the algorithms available in `sopt`.
+Torch's [`optim` package](https://github.com/torch/optim) implements all of the
+algorithms available in [`sopt`](https://github.com/adityaramesh/torch_utils).
 However, `sopt` adds NAG and the ability to use arbitrary decay schedules for
-many parameters. `sopt` implements the following algorithms:
+many parameters.
+
+`sopt` implements the following algorithms:
 
   - SGU (stochastic gradient update) (+ CM, NAG): see `source/train/sgu_100.lua`.
   - RMSProp (+ NAG): see `source/train/rmsprop_100.lua`.
