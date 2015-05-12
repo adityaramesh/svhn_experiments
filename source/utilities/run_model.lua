@@ -24,7 +24,7 @@ local function do_train_epoch(data, context, paths, info)
 
 	print("Starting training epoch " .. info.train.epoch .. ".")
 	for i = 1, train_size, batch_size do
-		-- xlua.progress(i, train_size)
+		xlua.progress(i, train_size)
 
 		-- Create the mini-batch.
 		local cur_batch_size = math.min(batch_size, train_size - i + 1)
@@ -63,7 +63,7 @@ local function do_train_epoch(data, context, paths, info)
 		end
 	end
 
-	-- xlua.progress(train_size, train_size)
+	xlua.progress(train_size, train_size)
 	confusion:updateValids()
 	local acc = confusion.totalValid
 	print("Mean class accuracy (training): " .. 100 * acc .. "%.")
@@ -84,7 +84,7 @@ local function do_valid_epoch(data, context, paths, info)
 
 	print("Performing validation epoch.")
 	for i = 1, valid_size, batch_size do
-		-- xlua.progress(i, valid_size)
+		xlua.progress(i, valid_size)
 
 		-- Create the mini-batch.
 		local cur_batch_size = math.min(batch_size, valid_size - i + 1)
@@ -108,7 +108,7 @@ local function do_valid_epoch(data, context, paths, info)
 		end
 	end
 
-	-- xlua.progress(valid_size, valid_size)
+	xlua.progress(valid_size, valid_size)
 	confusion:updateValids()
 	local acc = confusion.totalValid
 	print("Mean class accuracy (validation): " .. 100 * acc .. "%.")
@@ -135,16 +135,14 @@ function run(model_info_func, train_info_func)
 	local context = {}
 	context.params, context.grad_params = info.model.model:getParameters()
 	context.confusion = optim.ConfusionMatrix(10)
-	
-	print("number of epochs: " .. model_utils.n_epoch)
+
+	print("")
 	if do_train then
-		for i = 1, model_utils.n_epoch do
+		while true do
 			do_train_epoch(train_data, context, paths, info)
 			print("")
-			if i%2 == 0 or i == model_utils.n_epoch then
-				do_valid_epoch(valid_data, context, paths, info)
-				print("")
-			end
+			do_valid_epoch(valid_data, context, paths, info)
+			print("")
 		end
 	else
 		do_valid_epoch(valid_data, context, paths, info)
