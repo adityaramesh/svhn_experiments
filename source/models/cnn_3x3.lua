@@ -2,7 +2,7 @@ require "torch"
 require "nn"
 require "cunn"
 
-function get_model_info()
+function get_model_info(opt)
 	local model = nn.Sequential()
 
 	-- Group 1: 32^2 -> 34^2 -> 32^2 -> 16^2

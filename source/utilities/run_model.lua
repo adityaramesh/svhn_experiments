@@ -1,7 +1,10 @@
 require "torch"
 require "optim"
 require "xlua"
+
 require "torch_utils/model_utils"
+require "source/train/optimization"
+require "source/utilities/optimization_options"
 
 local function do_train_epoch(data, context, paths, info)
 	local model       = info.model.model
@@ -120,25 +123,27 @@ local function do_valid_epoch(data, context, paths, info)
 	end
 end
 
-function run(model_info_func, train_info_func)
+function run(model_info_func)
 	print("Loading data.")
 	local data_dir = "data/preprocessed/"
 	local train_data = torch.load(data_dir .. "train_small.t7")
 	local valid_data = torch.load(data_dir .. "test.t7")
 
-	local do_train, _, paths, info = model_utils.restore(model_info_func,
-		train_info_func)
+	local do_train, _, paths, info = model_utils.restore(
+		model_info_func, get_train_info, optimization_options)
+
 	if info.train.epoch ~= nil then
 		info.train.epoch = info.train.epoch + 1
 	end
 
 	local context = {}
+	local max_epochs = info.options.max_epochs or 1000
 	context.params, context.grad_params = info.model.model:getParameters()
 	context.confusion = optim.ConfusionMatrix(10)
 
 	print("")
 	if do_train then
-		while true do
+		while info.train.epoch == nil or info.train.epoch <= max_epochs do
 			do_train_epoch(train_data, context, paths, info)
 			print("")
 			do_valid_epoch(valid_data, context, paths, info)
