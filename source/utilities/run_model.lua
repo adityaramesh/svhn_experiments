@@ -132,6 +132,9 @@ function run(model_info_func)
 	local do_train, _, paths, info = model_utils.restore(
 		model_info_func, get_train_info, optimization_options)
 
+	print("Configuration options:")
+	print(info.options)
+
 	if info.train.epoch ~= nil then
 		info.train.epoch = info.train.epoch + 1
 	end
