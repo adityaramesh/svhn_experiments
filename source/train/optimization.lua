@@ -34,7 +34,7 @@ function get_train_info(opt)
 	return {
 		opt_state = {
 			learning_rate = learning_rate,
-			learningRate = learning_rate,
+			learningRate = opt.learning_rate,
 			momentum_type = momentum_type,
 			momentum = sopt.constant(momentum),
 			decay = sopt.constant(decay),
