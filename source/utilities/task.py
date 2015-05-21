@@ -1,9 +1,11 @@
 import time
+import sys
 from subprocess import Popen, DEVNULL
 
 class Worker:
     def __init__(self, base_command):
         self.base_command = base_command
+        self.command = None
         self.process = None
         self.return_code = None
 
@@ -12,14 +14,20 @@ class Worker:
             return False
 
         self.return_code = self.process.poll()
-        return False if self.return_code else True
+        if self.return_code is None:
+            return True
+
+        if self.return_code != 0:
+            print("Warning: command {} returned exit code {}.". \
+                format(self.command, self.return_code), file=sys.stderr)
+        return False
 
     def submit(self, arguments):
         if self.busy():
             raise RuntimeError("Attempt to submit task while busy.")
 
-        command = self.base_command + arguments
-        self.process = Popen(command, stdout=DEVNULL)
+        self.command = self.base_command + arguments
+        self.process = Popen(self.command, stdout=DEVNULL, stderr=DEVNULL)
         self.return_code = None
 
 class TaskManager:
@@ -73,24 +81,24 @@ class Task:
         args = ["-task", "replace", "-model", self.name, "-model_dir", self.model_dir, \
             "-batch_size", str(self.batch_size), "-opt_method", self.opt_method]
 
-        if self.lr:
+        if self.lr is not None:
             args.extend(["-learning_rate", str(self.lr)])
-        if self.lr_sched:
+        if self.lr_sched is not None:
             args.extend(["-learning_rate_schedule", str(self.lr_sched)])
-        if self.lr_decay:
+        if self.lr_decay is not None:
             args.extend(["-learning_rate_decay", str(self.lr_decay)])
-        if self.mom_type:
+        if self.mom_type is not None:
             args.extend(["-momentum_type", str(self.mom_type)])
-        if self.mom:
+        if self.mom is not None:
             args.extend(["-momentum", str(self.mom)])
-        if self.decay:
+        if self.decay is not None:
             args.extend(["-decay", str(self.decay)])
-        if self.epsilon:
+        if self.epsilon is not None:
             args.extend(["-epsilon", str(self.epsilon)])
-        if self.lambda_:
+        if self.lambda_ is not None:
             args.extend(["-lambda", str(self.lambda_)])
-        if self.beta_1:
+        if self.beta_1 is not None:
             args.extend(["-beta_1", str(self.beta_1)])
-        if self.beta_2:
+        if self.beta_2 is not None:
             args.extend(["-beta_2", str(self.beta_2)])
         return args
