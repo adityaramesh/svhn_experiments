@@ -119,21 +119,24 @@ def make_tasks():
 
     return tasks
 
-def initialize_workers(gpu_count):
+def initialize_workers(local_gpu_count, remote_gpu_count):
     workers = []
-    command = ["th", "source/drivers/svhn_5x5.lua"]
+    local_command = ["th", "source/drivers/svhn_5x5.lua"]
+    remote_command = ["bash", "source/utilities/th_julie.sh", "source/drivers/svhn_5x5.lua"]
 
-    for i in range(1, gpu_count + 1):
-        workers.append(Worker(command + ["-device", str(i)]))
+    for i in range(1, local_gpu_count + 1):
+        workers.append(Worker(local_command + ["-device", str(i)]))
+    for i in range(1, remote_gpu_count + 1):
+        workers.append(Worker(remote_command + ["-device", str(i)]))
     return TaskManager(workers)
 
 def run_tasks():
     gpu_count = 2
     tasks = make_tasks()
-    manager = initialize_workers(gpu_count)
+    manager = initialize_workers(gpu_count, gpu_count)
 
     num_epochs    = 50
-    sec_per_epoch = 10
+    sec_per_epoch = 10 + 10 / 3
     time_est = (len(tasks) * num_epochs * sec_per_epoch) / 3600 / gpu_count
     print("Number of tasks: {}.".format(len(tasks)))
     print("Estimated time to completion: {} hours.".format(time_est))

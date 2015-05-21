@@ -149,8 +149,10 @@ function run(model_info_func)
 		while info.train.epoch == nil or info.train.epoch <= max_epochs do
 			do_train_epoch(train_data, context, paths, info)
 			print("")
-			do_valid_epoch(valid_data, context, paths, info)
-			print("")
+			if info.train.epoch % 3 == 0 or info.train.epoch >= max_epochs - 5 then
+				do_valid_epoch(valid_data, context, paths, info)
+				print("")
+			end
 		end
 	else
 		do_valid_epoch(valid_data, context, paths, info)
