@@ -119,7 +119,7 @@ local function do_valid_epoch(data, context, paths, info)
 
 	if info.train.epoch ~= nil then
 		model_utils.save_test_progress(function(x, y) return x > y end,
-			info.train.epoch, acc, paths, info)
+			info.train.epoch - 1, acc, paths, info)
 	end
 end
 
@@ -149,7 +149,9 @@ function run(model_info_func)
 		while info.train.epoch == nil or info.train.epoch <= max_epochs do
 			do_train_epoch(train_data, context, paths, info)
 			print("")
-			if info.train.epoch % 3 == 0 or info.train.epoch >= max_epochs - 5 then
+
+			local cur_epoch = info.train.epoch - 1
+			if cur_epoch % 3 == 0 or cur_epoch >= max_epochs - 5 then
 				do_valid_epoch(valid_data, context, paths, info)
 				print("")
 			end
