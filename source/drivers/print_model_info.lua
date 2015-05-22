@@ -7,6 +7,6 @@ for file in lfs.dir(model_dir) do
 	local info_file = paths.concat(path, "acc_info.t7")
 	if paths.filep(info_file) then
 		local info = torch.load(info_file)
-		print(info_file, info.best_test)
+		print(file, #info.train_scores)
 	end
 end
