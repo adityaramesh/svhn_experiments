@@ -86,7 +86,6 @@ def make_tasks():
 
     for index, params in enumerate(product(rmsprop_lr_list, beta_1_list, beta_2_list)):
         lr, beta_1, beta_2 = params
-        print("adam_lr_beta1_beta2_" + str(index + 1), lr, beta_1, beta_2)
         tasks.append(Task(name="adam_lr_beta1_beta2_" + str(index + 1),
             model_dir=model_dir, batch_size=str(batch_size), opt_method="adam",
             lr=str(lr), epsilon=str(default_epsilon),
@@ -131,7 +130,7 @@ def run_tasks(tasks):
 
 def start():
     tasks = make_tasks()
-    run_tasks()
+    run_tasks(tasks)
 
 def finish_remaining_tasks():
     tasks = make_tasks()

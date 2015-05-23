@@ -158,7 +158,7 @@ def run_tasks(tasks):
 
 def start():
     tasks = make_tasks()
-    run_tasks()
+    run_tasks(tasks)
 
 def finish_remaining_tasks():
     tasks = make_tasks()
