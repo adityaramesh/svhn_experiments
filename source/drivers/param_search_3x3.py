@@ -96,8 +96,8 @@ def make_tasks():
 
 def initialize_workers(local_gpu_count, remote_gpu_count):
     workers = []
-    local_command = ["th", "source/drivers/svhn_5x5.lua"]
-    remote_command = ["bash", "source/utilities/th_julie.sh", "source/drivers/svhn_5x5.lua"]
+    local_command = ["th", "source/drivers/svhn_3x3.lua"]
+    remote_command = ["bash", "source/utilities/th_julie.sh", "source/drivers/svhn_3x3.lua"]
 
     for i in range(1, local_gpu_count + 1):
         workers.append(Worker(local_command + ["-device", str(i)]))
