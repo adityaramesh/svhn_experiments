@@ -9,4 +9,4 @@
 require "source/models/cnn_3x3"
 require "source/utilities/run_model"
 
-run(get_model_info, get_train_info, opt.max_epochs)
+run(get_model_info, get_train_info)

@@ -51,13 +51,13 @@ class TaskManager:
                 time.sleep(1)
 
 class Task:
-    def __init__(self, name, batch_size, opt_method, lr=None, lr_sched=None, \
-        lr_decay=None, mom_type=None, mom=None, decay=None, epsilon=None,    \
-        lambda_=None, beta_1=None, beta_2=None):
+    def __init__(self, name, model_dir, batch_size, opt_method, lr=None, \
+        lr_sched=None, lr_decay=None, mom_type=None, mom=None, decay=None, \
+        epsilon=None, lambda_=None, beta_1=None, beta_2=None):
 
         self.name       = name
+        self.model_dir  = model_dir
         self.batch_size = batch_size
-        self.model_dir  = "models/batch_" + str(self.batch_size)
         self.opt_method = opt_method
         self.lr         = lr
         self.lr_sched   = lr_sched
