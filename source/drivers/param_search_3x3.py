@@ -3,7 +3,7 @@ sys.path.insert(0, "source/utilities")
 from task import *
 from itertools import product
 
-def make_tasks():
+def make_tasks(verbose=False):
     """
     Creates tasks for the following experiments:
     - SGU
@@ -43,51 +43,81 @@ def make_tasks():
 
     tasks = []
 
+    def print_config(name, desc):
+        if verbose:
+            print("{}\t\"{}\"".format(name, desc))
+
     for index, epsilon in enumerate(epsilon_list):
-        tasks.append(Task(name="adadelta_eps_" + str(index + 1),
-            model_dir=model_dir, batch_size=str(batch_size),
-            opt_method="adadelta", lr=str(1), epsilon=str(epsilon)))
+        name = "adadelta_eps_" + str(index + 1)
+        print_config(name, "eps = {}".format(epsilon))
+
+        tasks.append(Task(name=name, model_dir=model_dir,
+            batch_size=str(batch_size), opt_method="adadelta", lr=str(1),
+            epsilon=str(epsilon)))
 
     for index, decay in enumerate(decay_list):
-        tasks.append(Task(name="adadelta_decay_" + str(index + 1),
-        model_dir=model_dir, batch_size=str(batch_size), opt_method="adadelta",
-        lr=str(1), decay=str(decay), epsilon=str(default_epsilon)))
+        name = "adadelta_decay_" + str(index + 1)
+        print_config(name, "decay = {}".format(decay))
+
+        tasks.append(Task(name=name, model_dir=model_dir,
+            batch_size=str(batch_size), opt_method="adadelta",
+            lr=str(1), decay=str(decay), epsilon=str(default_epsilon)))
 
     for index, params in enumerate(product(decay_list, mom_list)):
         decay, mom = params
-        tasks.append(Task(name="adadelta_decay_mom_" + str(index + 1),
-            model_dir=model_dir, batch_size=str(batch_size),
-            opt_method="adadelta", lr=str(1), decay=str(decay), mom=str(mom),
-            mom_type="nag", epsilon=str(default_epsilon)))
+        name = "adadelta_decay_mom_" + str(index + 1)
+        print_config(name, "decay = {}, mom = {}".format(decay, mom))
+
+        tasks.append(Task(name=name, model_dir=model_dir,
+            batch_size=str(batch_size), opt_method="adadelta", lr=str(1),
+            decay=str(decay), mom=str(mom), mom_type="nag",
+            epsilon=str(default_epsilon)))
 
     for index, epsilon in enumerate(epsilon_list):
-        tasks.append(Task(name="rmsprop_eps_" + str(index + 1),
-        model_dir=model_dir, batch_size=str(batch_size), opt_method="rmsprop",
-        lr=str(default_rmsprop_lr), epsilon=str(epsilon)))
+        name = "rmsprop_eps_" + str(index + 1)
+        print_config(name, "eps = {}".format(epsilon))
+
+        tasks.append(Task(name=name, model_dir=model_dir,
+            batch_size=str(batch_size), opt_method="rmsprop",
+            lr=str(default_rmsprop_lr), epsilon=str(epsilon)))
 
     for index, params in enumerate(product(rmsprop_lr_list, decay_list)):
         lr, decay = params
-        tasks.append(Task(name="rmsprop_decay_" + str(index + 1),
-        model_dir=model_dir, batch_size=str(batch_size), opt_method="rmsprop",
-        lr=str(lr), decay=str(decay), epsilon=str(default_epsilon)))
+        name = "rmsprop_decay_" + str(index + 1)
+        print_config(name, "lr = {}, decay = {}".format(lr, decay))
+
+        tasks.append(Task(name=name, model_dir=model_dir,
+            batch_size=str(batch_size), opt_method="rmsprop",
+            lr=str(lr), decay=str(decay), epsilon=str(default_epsilon)))
 
     for index, params in enumerate(product(rmsprop_lr_list, decay_list, mom_list)):
         lr, decay, mom = params
-        tasks.append(Task(name="rmsprop_decay_mom_" + str(index + 1),
-        model_dir=model_dir, batch_size=str(batch_size), opt_method="rmsprop",
-        lr=str(lr), decay=str(decay), mom=str(mom), mom_type="nag",
-        epsilon=str(default_epsilon)))
+        name = "rmsprop_decay_mom_" + str(index + 1)
+        print_config(name, "lr = {}, decay = {}, mom = {}".format(lr, decay, mom))
+
+        tasks.append(Task(name=name, model_dir=model_dir,
+            batch_size=str(batch_size), opt_method="rmsprop",
+            lr=str(lr), decay=str(decay), mom=str(mom), mom_type="nag",
+            epsilon=str(default_epsilon)))
 
     for index, params in enumerate(product(epsilon_list, lambda_list)):
         epsilon, lambda_ = params
-        tasks.append(Task(name="adam_eps_lambda_" + str(index + 1),
-        model_dir=model_dir, batch_size=str(batch_size), opt_method="adam",
-        lr=str(default_rmsprop_lr), epsilon=str(epsilon), lambda_=str(lambda_)))
+        name = "adam_eps_lambda_" + str(index + 1)
+        print_config(name, "eps = {}, lambda = {}".format(epsilon, lambda_))
+
+        tasks.append(Task(name=name, model_dir=model_dir,
+            batch_size=str(batch_size), opt_method="adam",
+            lr=str(default_rmsprop_lr), epsilon=str(epsilon),
+            lambda_=str(lambda_)))
 
     for index, params in enumerate(product(rmsprop_lr_list, beta_1_list, beta_2_list)):
         lr, beta_1, beta_2 = params
-        tasks.append(Task(name="adam_lr_beta1_beta2_" + str(index + 1),
-            model_dir=model_dir, batch_size=str(batch_size), opt_method="adam",
+        name = "adam_lr_beta1_beta2_" + str(index + 1)
+        print_config(name, "lr = {}, beta_1 = {}, beta_2 = {}".format( \
+            lr, beta_1, beta_2))
+
+        tasks.append(Task(name=name, model_dir=model_dir,
+            batch_size=str(batch_size), opt_method="adam",
             lr=str(lr), epsilon=str(default_epsilon),
             lambda_=str(default_lambda), beta_1=str(beta_1),
             beta_2=str(beta_2)))
@@ -100,7 +130,8 @@ def initialize_workers(local_gpu_count, remote_gpu_count):
     remote_command = ["bash", "source/utilities/th_julie.sh", "source/drivers/svhn_3x3.lua"]
 
     for i in range(1, local_gpu_count + 1):
-        workers.append(Worker(local_command + ["-device", str(i)]))
+        workers.append(Worker(local_command + ["-device", str(i)] + \
+            ["-max_epochs", "80"]))
 
     # For some reason, remote commands can get killed before they finish. Maybe
     # this is because of the connection being seen as idle? I don't have time to
@@ -148,5 +179,6 @@ def finish_remaining_tasks():
     run_tasks(new_tasks)
 
 
-start()
+make_tasks(True)
+#start()
 #finish_remaining_tasks()
