@@ -152,7 +152,8 @@ local function estimate_max_eigenvalue(data, context, paths, info)
 			local b = best_alpha + 10 * step
 
 			for alpha = a, b + step, step do
-				skew, eig = g(alpha, inner_iters)
+				-- XXX remove the 3 * iters if it doesn't help.
+				skew, eig = g(alpha, 3 * inner_iters)
 
 				if skew < best_skew then
 					best_skew = skew
@@ -163,6 +164,128 @@ local function estimate_max_eigenvalue(data, context, paths, info)
 				end
 			end
 		end
+
+		-- XXX: encapsulate this in a function if it works.
+		if skew >= tol then
+			local step = 0
+			if best_alpha < 1e-8 then
+				step = 1e-11
+			elseif best_alpha < 1e-7 then
+				step = 1e-10
+			elseif best_alpha < 1e-6 then
+				step = 1e-9
+			elseif best_alpha < 1e-5 then
+				step = 1e-8
+			elseif best_alpha < 1e-4 then
+				step = 1e-7
+			end
+
+			local a = math.max(best_alpha - 10 * step, step)
+			local b = best_alpha + 10 * step
+
+			for alpha = a, b + step, step do
+				skew, eig = g(alpha, 3 * inner_iters)
+
+				if skew < best_skew then
+					best_skew = skew
+					best_alpha = alpha
+				end
+				if skew < tol then
+					break
+				end
+			end
+		end
+
+		-- XXX: encapsulate this in a function if it works.
+		if skew >= tol then
+			local step = 0
+			if best_alpha < 1e-8 then
+				step = 1e-12
+			elseif best_alpha < 1e-7 then
+				step = 1e-11
+			elseif best_alpha < 1e-6 then
+				step = 1e-10
+			elseif best_alpha < 1e-5 then
+				step = 1e-9
+			elseif best_alpha < 1e-4 then
+				step = 1e-8
+			end
+
+			local a = math.max(best_alpha - 10 * step, step)
+			local b = best_alpha + 10 * step
+
+			for alpha = a, b + step, step do
+				skew, eig = g(alpha, 3 * inner_iters)
+
+				if skew < best_skew then
+					best_skew = skew
+					best_alpha = alpha
+				end
+				if skew < tol then
+					break
+				end
+			end
+		end
+
+		--if skew >= tol then
+		--	local step = 0
+		--	if best_alpha < 1e-8 then
+		--		step = 1e-13
+		--	elseif best_alpha < 1e-7 then
+		--		step = 1e-12
+		--	elseif best_alpha < 1e-6 then
+		--		step = 1e-11
+		--	elseif best_alpha < 1e-5 then
+		--		step = 1e-10
+		--	elseif best_alpha < 1e-4 then
+		--		step = 1e-9
+		--	end
+
+		--	local a = math.max(best_alpha - 10 * step, step)
+		--	local b = best_alpha + 10 * step
+
+		--	for alpha = a, b + step, step do
+		--		skew, eig = g(alpha, 3 * inner_iters)
+
+		--		if skew < best_skew then
+		--			best_skew = skew
+		--			best_alpha = alpha
+		--		end
+		--		if skew < tol then
+		--			break
+		--		end
+		--	end
+		--end
+
+		--if skew >= tol then
+		--	local step = 0
+		--	if best_alpha < 1e-8 then
+		--		step = 1e-14
+		--	elseif best_alpha < 1e-7 then
+		--		step = 1e-13
+		--	elseif best_alpha < 1e-6 then
+		--		step = 1e-12
+		--	elseif best_alpha < 1e-5 then
+		--		step = 1e-11
+		--	elseif best_alpha < 1e-4 then
+		--		step = 1e-10
+		--	end
+
+		--	local a = math.max(best_alpha - 10 * step, step)
+		--	local b = best_alpha + 10 * step
+
+		--	for alpha = a, b + step, step do
+		--		skew, eig = g(alpha, 3 * inner_iters)
+
+		--		if skew < best_skew then
+		--			best_skew = skew
+		--			best_alpha = alpha
+		--		end
+		--		if skew < tol then
+		--			break
+		--		end
+		--	end
+		--end
 
 		if skew < tol then
 			print("Found maximum eigenvalue: " .. eig .. ".")
