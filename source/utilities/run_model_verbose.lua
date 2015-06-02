@@ -204,10 +204,10 @@ local function estimate_max_eigenvalue(data, context, paths, info)
 				local cur_skew = accuracies[j]
 				local cur_alpha = results[cur_skew]
 
-				-- TODO: Reduce the number of inner iterations
-				-- if possible.
+				-- TODO: Change this back to 3 * inner_iters if
+				-- there are more failures.
 				local new_alpha, new_skew, new_eig =
-					iterative_grid_search(g, 3, 3 * inner_iters,
+					iterative_grid_search(g, 3, inner_iters,
 						tol, cur_alpha, cur_skew)
 
 				if new_skew < best_skew then
