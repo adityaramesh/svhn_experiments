@@ -5,7 +5,63 @@ require "xlua"
 require "torch_utils/model_utils"
 require "source/train/optimization"
 require "source/utilities/optimization_options"
-require "source/utilities/fmin"
+
+local function local_grid_search(f, iters, gran, tol, alpha)
+	assert(gran > 0 and gran < 1)
+	assert(alpha > 0 and alpha < 1)
+
+	local a = math.max(alpha - 10 * gran, gran)
+	local b = alpha + 10 * gran
+	local best_alpha = 0
+	local best_skew = 1
+	local eig = 0
+
+	for cur_alpha = a, b + gran, gran do
+		-- TODO: Change `3 * iters` if it doesn't help.
+		local cur_skew, cur_eig = f(cur_alpha, iters)
+
+		if cur_skew < best_skew then
+			if cur_skew < tol then
+				return cur_alpha, cur_skew, cur_eig
+			end
+
+			best_alpha = cur_alpha
+			best_skew = cur_skew
+			eig = cur_eig
+		end
+	end
+
+	return best_alpha, best_skew, eig
+end
+
+local function iterative_grid_search(f, outer_iters, inner_iters, tol, alpha, skew)
+	assert(tol > 0 and tol < 1)
+	assert(alpha > 0 and alpha < 1)
+
+	local exp = math.floor(math.log(alpha) / math.log(10))
+	local gran = math.pow(10, exp - 1)
+	local best_alpha = alpha
+	local best_skew = skew
+	local eig = 0
+
+	for i = 1, outer_iters do
+		local cur_alpha, cur_skew, cur_eig =
+			local_grid_search(f, inner_iters, gran, tol, best_alpha)
+
+		if cur_skew < best_skew then
+			if cur_skew < tol then
+				return cur_alpha, cur_skew, cur_eig
+			end
+
+			best_alpha = cur_alpha
+			best_skew = cur_skew
+			eig = cur_eig
+		end
+		gran = gran / 10
+	end
+
+	return best_alpha, best_skew, eig
+end
 
 local function estimate_max_eigenvalue(data, context, paths, info)
 	local model       = info.model.model
@@ -77,6 +133,7 @@ local function estimate_max_eigenvalue(data, context, paths, info)
 		local g = function(alpha, iters)
 			-- "Hot-starting" the iterations using the previous
 			-- value of `phi` actually seems to retard progress.
+			-- Instead, we use the saved value of `init_phi`.
 			phi:copy(init_phi)
 
 			local proj = 0
@@ -84,7 +141,8 @@ local function estimate_max_eigenvalue(data, context, paths, info)
 			local norm = 0
 
 			for j = 1, iters do
-				-- We can't undo the action of adding `-alpha *
+				-- Because of finite precision arithmetic, we
+				-- can't undo the action of adding `-alpha *
 				-- phi` to `params` by subtracting the same
 				-- quantity. Instead, we save `params` and
 				-- restore it after bprop.
@@ -114,180 +172,57 @@ local function estimate_max_eigenvalue(data, context, paths, info)
 			return skew, norm
 		end
 
-		local eig = 0
-		local skew = 0
-		local best_skew = 1
+		local results = {}
 		local best_alpha = 0
+		local best_skew = 1
+		local eig = 0
 
 		for j = 1, #alpha_list do
-			skew, eig = g(alpha_list[j], inner_iters)
+			local cur_alpha = alpha_list[j]
+			local cur_skew, cur_eig = g(cur_alpha, inner_iters)
+			results[cur_skew] = cur_alpha
 
-			if skew < best_skew then
-				best_skew = skew
-				best_alpha = alpha_list[j]
-			end
-			if skew < tol then
-				break
-			end
-		end
+			if cur_skew < best_skew then
+				best_alpha = cur_alpha
+				best_skew = cur_skew
+				eig = cur_eig
 
-		-- This is a last-ditch effort to try to find a good value for
-		-- alpha, by doing a small grid search around the best value of
-		-- alpha found so far.
-		if skew >= tol then
-			local step = 0
-			if best_alpha < 1e-8 then
-				step = 1e-10
-			elseif best_alpha < 1e-7 then
-				step = 1e-9
-			elseif best_alpha < 1e-6 then
-				step = 1e-8
-			elseif best_alpha < 1e-5 then
-				step = 1e-7
-			elseif best_alpha < 1e-4 then
-				step = 1e-6
-			end
-
-			local a = math.max(best_alpha - 10 * step, step)
-			local b = best_alpha + 10 * step
-
-			for alpha = a, b + step, step do
-				-- XXX remove the 3 * iters if it doesn't help.
-				skew, eig = g(alpha, 3 * inner_iters)
-
-				if skew < best_skew then
-					best_skew = skew
-					best_alpha = alpha
-				end
-				if skew < tol then
+				if best_skew < tol then
 					break
 				end
 			end
 		end
 
-		-- XXX: encapsulate this in a function if it works.
-		if skew >= tol then
-			local step = 0
-			if best_alpha < 1e-8 then
-				step = 1e-11
-			elseif best_alpha < 1e-7 then
-				step = 1e-10
-			elseif best_alpha < 1e-6 then
-				step = 1e-9
-			elseif best_alpha < 1e-5 then
-				step = 1e-8
-			elseif best_alpha < 1e-4 then
-				step = 1e-7
+		if best_skew >= tol then
+			local accuracies = {}
+			for k in pairs(results) do
+				table.insert(accuracies, k)
 			end
+			table.sort(accuracies)
 
-			local a = math.max(best_alpha - 10 * step, step)
-			local b = best_alpha + 10 * step
+			for j = 1, math.min(#accuracies, 5) do
+				local cur_skew = accuracies[j]
+				local cur_alpha = results[cur_skew]
 
-			for alpha = a, b + step, step do
-				skew, eig = g(alpha, 3 * inner_iters)
+				-- TODO: Reduce the number of inner iterations
+				-- if possible.
+				local new_alpha, new_skew, new_eig =
+					iterative_grid_search(g, 3, 3 * inner_iters,
+						tol, cur_alpha, cur_skew)
 
-				if skew < best_skew then
-					best_skew = skew
-					best_alpha = alpha
-				end
-				if skew < tol then
-					break
+				if new_skew < best_skew then
+					best_alpha = new_alpha
+					best_skew = new_skew
+					eig = new_eig
+
+					if best_skew < tol then
+						break
+					end
 				end
 			end
 		end
 
-		-- XXX: encapsulate this in a function if it works.
-		if skew >= tol then
-			local step = 0
-			if best_alpha < 1e-8 then
-				step = 1e-12
-			elseif best_alpha < 1e-7 then
-				step = 1e-11
-			elseif best_alpha < 1e-6 then
-				step = 1e-10
-			elseif best_alpha < 1e-5 then
-				step = 1e-9
-			elseif best_alpha < 1e-4 then
-				step = 1e-8
-			end
-
-			local a = math.max(best_alpha - 10 * step, step)
-			local b = best_alpha + 10 * step
-
-			for alpha = a, b + step, step do
-				skew, eig = g(alpha, 3 * inner_iters)
-
-				if skew < best_skew then
-					best_skew = skew
-					best_alpha = alpha
-				end
-				if skew < tol then
-					break
-				end
-			end
-		end
-
-		--if skew >= tol then
-		--	local step = 0
-		--	if best_alpha < 1e-8 then
-		--		step = 1e-13
-		--	elseif best_alpha < 1e-7 then
-		--		step = 1e-12
-		--	elseif best_alpha < 1e-6 then
-		--		step = 1e-11
-		--	elseif best_alpha < 1e-5 then
-		--		step = 1e-10
-		--	elseif best_alpha < 1e-4 then
-		--		step = 1e-9
-		--	end
-
-		--	local a = math.max(best_alpha - 10 * step, step)
-		--	local b = best_alpha + 10 * step
-
-		--	for alpha = a, b + step, step do
-		--		skew, eig = g(alpha, 3 * inner_iters)
-
-		--		if skew < best_skew then
-		--			best_skew = skew
-		--			best_alpha = alpha
-		--		end
-		--		if skew < tol then
-		--			break
-		--		end
-		--	end
-		--end
-
-		--if skew >= tol then
-		--	local step = 0
-		--	if best_alpha < 1e-8 then
-		--		step = 1e-14
-		--	elseif best_alpha < 1e-7 then
-		--		step = 1e-13
-		--	elseif best_alpha < 1e-6 then
-		--		step = 1e-12
-		--	elseif best_alpha < 1e-5 then
-		--		step = 1e-11
-		--	elseif best_alpha < 1e-4 then
-		--		step = 1e-10
-		--	end
-
-		--	local a = math.max(best_alpha - 10 * step, step)
-		--	local b = best_alpha + 10 * step
-
-		--	for alpha = a, b + step, step do
-		--		skew, eig = g(alpha, 3 * inner_iters)
-
-		--		if skew < best_skew then
-		--			best_skew = skew
-		--			best_alpha = alpha
-		--		end
-		--		if skew < tol then
-		--			break
-		--		end
-		--	end
-		--end
-
-		if skew < tol then
+		if best_skew < tol then
 			print("Found maximum eigenvalue: " .. eig .. ".")
 			eigs[#eigs + 1] = eig
 		else
