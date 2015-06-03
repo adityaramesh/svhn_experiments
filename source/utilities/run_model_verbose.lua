@@ -172,52 +172,75 @@ local function estimate_max_eigenvalue(data, context, paths, info)
 			return skew, norm
 		end
 
-		local results = {}
 		local best_alpha = 0
 		local best_skew = 1
 		local eig = 0
 
-		for j = 1, #alpha_list do
-			local cur_alpha = alpha_list[j]
-			local cur_skew, cur_eig = g(cur_alpha, inner_iters)
-			results[cur_skew] = cur_alpha
+		local isnan = function(x) return x ~= x end
 
-			if cur_skew < best_skew then
-				best_alpha = cur_alpha
-				best_skew = cur_skew
-				eig = cur_eig
+		local run_grid_search = function()
+			local results = {}
 
-				if best_skew < tol then
-					break
+			for j = 1, #alpha_list do
+				local cur_alpha = alpha_list[j]
+				local cur_skew, cur_eig = g(cur_alpha, inner_iters)
+
+				if not isnan(cur_skew) then
+					results[cur_skew] = cur_alpha
+
+					if cur_skew < best_skew then
+						best_alpha = cur_alpha
+						best_skew = cur_skew
+						eig = cur_eig
+
+						if best_skew < tol then
+							break
+						end
+					end
+				end
+			end
+
+			if best_skew >= tol then
+				local accuracies = {}
+				for k in pairs(results) do
+					table.insert(accuracies, k)
+				end
+				table.sort(accuracies)
+
+				for j = 1, math.min(#accuracies, 5) do
+					local cur_skew = accuracies[j]
+					local cur_alpha = results[cur_skew]
+
+					local new_alpha, new_skew, new_eig =
+						iterative_grid_search(g, 3, inner_iters,
+							tol, cur_alpha, cur_skew)
+
+					if new_skew < best_skew then
+						best_alpha = new_alpha
+						best_skew = new_skew
+						eig = new_eig
+
+						if best_skew < tol then
+							break
+						end
+					end
 				end
 			end
 		end
 
+		run_grid_search()
+
 		if best_skew >= tol then
-			local accuracies = {}
-			for k in pairs(results) do
-				table.insert(accuracies, k)
-			end
-			table.sort(accuracies)
+			for j = 1, 5 do
+				best_alpha = 0
+				best_skew = 1
+				eig = 0
 
-			for j = 1, math.min(#accuracies, 5) do
-				local cur_skew = accuracies[j]
-				local cur_alpha = results[cur_skew]
+				init_phi:copy(torch.randn(params:size(1)))
+				run_grid_search()
 
-				-- TODO: Change this back to 3 * inner_iters if
-				-- there are more failures.
-				local new_alpha, new_skew, new_eig =
-					iterative_grid_search(g, 3, inner_iters,
-						tol, cur_alpha, cur_skew)
-
-				if new_skew < best_skew then
-					best_alpha = new_alpha
-					best_skew = new_skew
-					eig = new_eig
-
-					if best_skew < tol then
-						break
-					end
+				if best_skew < tol then
+					break
 				end
 			end
 		end
