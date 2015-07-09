@@ -6,7 +6,7 @@ require "torch_utils/model_utils"
 require "source/train/optimization"
 require "source/utilities/optimization_options"
 
-local function local_grid_search(f, iters, gran, tol, alpha)
+local function local_grid_search(eig_func, iters, gran, tol, alpha)
 	assert(gran > 0 and gran < 1)
 	assert(alpha > 0 and alpha < 1)
 
@@ -17,8 +17,7 @@ local function local_grid_search(f, iters, gran, tol, alpha)
 	local eig = 0
 
 	for cur_alpha = a, b + gran, gran do
-		-- TODO: Change `3 * iters` if it doesn't help.
-		local cur_skew, cur_eig = f(cur_alpha, iters)
+		local cur_skew, cur_eig = eig_func(cur_alpha, iters)
 
 		if cur_skew < best_skew then
 			if cur_skew < tol then
@@ -34,7 +33,7 @@ local function local_grid_search(f, iters, gran, tol, alpha)
 	return best_alpha, best_skew, eig
 end
 
-local function iterative_grid_search(f, outer_iters, inner_iters, tol, alpha, skew)
+local function iterative_grid_search(eig_func, outer_iters, inner_iters, tol, alpha, skew)
 	assert(tol > 0 and tol < 1)
 	assert(alpha > 0 and alpha < 1)
 
@@ -46,7 +45,7 @@ local function iterative_grid_search(f, outer_iters, inner_iters, tol, alpha, sk
 
 	for i = 1, outer_iters do
 		local cur_alpha, cur_skew, cur_eig =
-			local_grid_search(f, inner_iters, gran, tol, best_alpha)
+			local_grid_search(eig_func, inner_iters, gran, tol, best_alpha)
 
 		if cur_skew < best_skew then
 			if cur_skew < tol then
@@ -63,6 +62,9 @@ local function iterative_grid_search(f, outer_iters, inner_iters, tol, alpha, sk
 	return best_alpha, best_skew, eig
 end
 
+--
+-- TODO: Refactor this later.
+--
 local function estimate_max_eigenvalue(data, context, paths, info)
 	local model       = info.model.model
 	local criterion   = info.model.criterion
@@ -75,6 +77,7 @@ local function estimate_max_eigenvalue(data, context, paths, info)
 
 	local outer_iters = 100
 	local inner_iters = 5
+	assert(outer_iters <= batch_size)
 
 	-- This value of `tol` is actually quite forgiving. If `tol` is much
 	-- higher than 1e-8, then the corresponding eigenvalue will only be
@@ -83,8 +86,8 @@ local function estimate_max_eigenvalue(data, context, paths, info)
 	local tol = 1e-6
 
 	local alpha_list  = {
-		-- For some reason, 6.56e-8 seems to give very good results for
-		-- a large fraction of the finite differences.
+		-- For some reason, 6.56e-8 seems to give good results for a
+		-- large fraction of the finite differences.
 		6.56e-8,
 		1e-8, 2e-8, 3e-8, 4e-8, 5e-8, 6e-8, 7e-8, 8e-8, 9e-8,
 		1e-7, 2e-7, 3e-7, 4e-7, 5e-7, 6e-7, 7e-7, 8e-7, 9e-7,
@@ -118,7 +121,7 @@ local function estimate_max_eigenvalue(data, context, paths, info)
 
 		-- Define the function to obtain the model's output and gradient
 		-- with respect to parameters.
-		local f = function(x)
+		local grad_func = function(x)
 			if x ~= params then
 				params:copy(x)
 			end
@@ -130,7 +133,7 @@ local function estimate_max_eigenvalue(data, context, paths, info)
 			return loss, grad_params
 		end
 
-		local g = function(alpha, iters)
+		local eig_func = function(alpha, iters)
 			-- "Hot-starting" the iterations using the previous
 			-- value of `phi` actually seems to retard progress.
 			-- Instead, we use the saved value of `init_phi`.
@@ -147,12 +150,12 @@ local function estimate_max_eigenvalue(data, context, paths, info)
 				-- quantity. Instead, we save `params` and
 				-- restore it after bprop.
 				params:add(-alpha, phi)
-				f(params)
+				grad_func(params)
 				tmp_grad:copy(grad_params)
 
 				params:copy(tmp_params)
 				params:add(alpha, phi)
-				f(params)
+				grad_func(params)
 				params:copy(tmp_params)
 				grad_params:add(-1, tmp_grad):div(2 * alpha)
 
@@ -178,12 +181,17 @@ local function estimate_max_eigenvalue(data, context, paths, info)
 
 		local isnan = function(x) return x ~= x end
 
-		local run_grid_search = function()
+		-- Note: we might get this to run faster by reinitializing
+		-- `init_phi` sooner if we aren't able to compute the maximum
+		-- eigenvalue.
+		local grid_search_func = function()
 			local results = {}
 
+			-- First try all of the `alpha` values that are in
+			-- `alpha_list` for the finite difference.
 			for j = 1, #alpha_list do
 				local cur_alpha = alpha_list[j]
-				local cur_skew, cur_eig = g(cur_alpha, inner_iters)
+				local cur_skew, cur_eig = eig_func(cur_alpha, inner_iters)
 
 				if not isnan(cur_skew) then
 					results[cur_skew] = cur_alpha
@@ -200,6 +208,9 @@ local function estimate_max_eigenvalue(data, context, paths, info)
 				end
 			end
 
+			-- If we weren't able to find a good value for `alpha`,
+			-- then run a nested grid search to try to hone in on a
+			-- better value.
 			if best_skew >= tol then
 				local accuracies = {}
 				for k in pairs(results) do
@@ -212,8 +223,9 @@ local function estimate_max_eigenvalue(data, context, paths, info)
 					local cur_alpha = results[cur_skew]
 
 					local new_alpha, new_skew, new_eig =
-						iterative_grid_search(g, 3, inner_iters,
-							tol, cur_alpha, cur_skew)
+						iterative_grid_search(eig_func,
+							3, inner_iters, tol,
+							cur_alpha, cur_skew)
 
 					if new_skew < best_skew then
 						best_alpha = new_alpha
@@ -228,8 +240,11 @@ local function estimate_max_eigenvalue(data, context, paths, info)
 			end
 		end
 
-		run_grid_search()
+		grid_search_func()
 
+		-- If we still weren't able to compute the maximum eigenvalue
+		-- using the nested grid search, then reinitialize `init_phi`
+		-- and try again.
 		if best_skew >= tol then
 			for j = 1, 5 do
 				best_alpha = 0
@@ -237,7 +252,7 @@ local function estimate_max_eigenvalue(data, context, paths, info)
 				eig = 0
 
 				init_phi:copy(torch.randn(params:size(1)))
-				run_grid_search()
+				grid_search_func()
 
 				if best_skew < tol then
 					break
@@ -298,7 +313,7 @@ local function do_train_epoch(data, context, paths, info)
 
 		-- Define the function to obtain the model's output and gradient
 		-- with respect to parameters.
-		local f = function(x)
+		local grad_func = function(x)
 			if x ~= params then
 				params:copy(x)
 			end
@@ -311,11 +326,27 @@ local function do_train_epoch(data, context, paths, info)
 			return loss, grad_params
 		end
 
-		opt_method(f, params, opt_state)
+		opt_method(grad_func, params, opt_state)
 
 		local k = (i - 1) / batch_size + 1
-		if k == 1 or k == 33 or k == 66 or k == 99 then
-			estimate_max_eigenvalue(data, context, paths, info)
+		local iters_per_epoch = train_size / batch_size
+		local iters_per_eig_est = iters_per_epoch / 3
+
+		-- Let `m := iters_per_eig_est`. We want to check whether
+		-- `k - 1 = round(q * m)`, where `q` is an integer. After
+		-- some manipulation, one gets
+		--     floor((k - 1) / ceil(m)) <= q <= ceil((k - 1) / floor(m)).
+		-- This allows us to determine whether `k - 1` satisfies the
+		-- desired condition after checking only a few integer values.
+
+		local qmin = math.floor((k - 1) / math.ceil(iters_per_eig_est))
+		local qmax = math.ceil((k - 1) / math.floor(iters_per_eig_est))
+		for q = qmin, qmax do
+			if k - 1 == math.floor(q * iters_per_eig_est + 0.5) then
+				print(k)
+				estimate_max_eigenvalue(data, context, paths, info)
+				break
+			end
 		end
 	end
 
