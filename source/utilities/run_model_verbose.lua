@@ -5,6 +5,7 @@ require "xlua"
 require "torch_utils/model_utils"
 require "source/train/optimization"
 require "source/utilities/optimization_options"
+require "source/utilities/csv_logger"
 
 local function local_grid_search(eig_func, iters, gran, tol, alpha)
 	assert(gran > 0 and gran < 1)
@@ -75,7 +76,9 @@ local function estimate_max_eigenvalue(data, context, paths, info)
 	local batch_size  = info.train.batch_size
 	local perm        = torch.randperm(train_size)
 
+	-- Number of times to sample the maximum eigenvalue.
 	local outer_iters = 100
+	-- Number of iterations of the power method.
 	local inner_iters = 5
 	assert(outer_iters <= batch_size)
 
@@ -101,6 +104,7 @@ local function estimate_max_eigenvalue(data, context, paths, info)
 	local tmp_grad   = torch.CudaTensor(params:size(1))
 	local tmp_params = params:clone()
 	local eigs       = {}
+	local losses     = {}
 
 	for i = 1, 1 + (outer_iters - 1) * batch_size, batch_size do
 		print("Iteration " .. (i - 1) / batch_size + 1)
@@ -261,8 +265,11 @@ local function estimate_max_eigenvalue(data, context, paths, info)
 		end
 
 		if best_skew < tol then
-			print("Found maximum eigenvalue: " .. eig .. ".")
+			local loss = grad_func(params)
 			eigs[#eigs + 1] = eig
+			losses[#losses + 1] = loss
+			print("Found maximum eigenvalue: " .. eig .. " (loss: "
+				.. loss .. ").")
 		else
 			print("Failed to find maximum eigenvalue.")
 			print("Best skew: " .. best_skew .. ".")
@@ -270,8 +277,8 @@ local function estimate_max_eigenvalue(data, context, paths, info)
 		end
 	end
 
-	eigs = torch.Tensor(eigs)
-	print(eigs)
+	context.logger:log_array("max_eigs", eigs)
+	context.logger:log_array("eig_losses", losses)
 end
 
 local function do_train_epoch(data, context, paths, info)
@@ -292,8 +299,8 @@ local function do_train_epoch(data, context, paths, info)
 
 	local perm = torch.randperm(train_size)
 	model:training()
-
 	print("Starting training epoch " .. info.train.epoch .. ".")
+
 	for i = 1, train_size, batch_size do
 		xlua.progress(i, train_size)
 
@@ -313,7 +320,7 @@ local function do_train_epoch(data, context, paths, info)
 
 		-- Define the function to obtain the model's output and gradient
 		-- with respect to parameters.
-		local grad_func = function(x)
+		local grad_func = function(x, log_info)
 			if x ~= params then
 				params:copy(x)
 			end
@@ -322,15 +329,28 @@ local function do_train_epoch(data, context, paths, info)
 			local outputs = model:forward(inputs)
 			local loss = criterion:forward(outputs, targets)
 			model:backward(inputs, criterion:backward(outputs, targets))
-			confusion:batchAdd(outputs, targets)
+
+			log_info = log_info or true
+			if log_info then
+				confusion:batchAdd(outputs, targets)
+				context.logger:log_value("train_loss", loss)
+				context.logger:log_value("norm_grad", grad_params:norm())
+			end
 			return loss, grad_params
 		end
 
-		opt_method(grad_func, params, opt_state)
+		local r1, r2, theta, eta_a, eta_w = opt_method(
+			grad_func, params, opt_state)
 
 		local k = (i - 1) / batch_size + 1
 		local iters_per_epoch = train_size / batch_size
 		local iters_per_eig_est = iters_per_epoch / 3
+
+		context.logger:log_value("train_epoch", info.train.epoch)
+		context.logger:log_value("train_iter", k)
+		context.logger:log_value("theta", theta)
+		context.logger:log_value("eta_a", eta_a)
+		context.logger:log_value("eta_w", eta_w)
 
 		-- Let `m := iters_per_eig_est`. We want to check whether
 		-- `k - 1 = round(q * m)`, where `q` is an integer. After
@@ -343,11 +363,12 @@ local function do_train_epoch(data, context, paths, info)
 		local qmax = math.ceil((k - 1) / math.floor(iters_per_eig_est))
 		for q = qmin, qmax do
 			if k - 1 == math.floor(q * iters_per_eig_est + 0.5) then
-				print(k)
 				estimate_max_eigenvalue(data, context, paths, info)
 				break
 			end
 		end
+
+		context.logger:flush()
 	end
 
 	xlua.progress(train_size, train_size)
@@ -425,6 +446,9 @@ function run(model_info_func)
 
 	local context = {}
 	local max_epochs = info.options.max_epochs or 1000
+	context.logger = CSVLogger.create(info.options.model, {"train_epoch",
+		"train_iter", "train_loss", "norm_grad", "max_eigs",
+		"eig_losses", "theta", "eta_a", "eta_w"})
 	context.params, context.grad_params = info.model.model:getParameters()
 	context.confusion = optim.ConfusionMatrix(10)
 
