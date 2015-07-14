@@ -22,7 +22,7 @@ def make_tasks(verbose=False):
     """
 
     batch_size = 100
-    model_dir = "models/svhn_5x5_batch_100"
+    model_dir = "models/svhn_5x5_nag_batch_100"
 
     """
     Some notes:
@@ -32,11 +32,11 @@ def make_tasks(verbose=False):
     - Momentum seems to perform better with lower learning rates.
     """
     sgu_lr_list     = [0.1, 0.2, 0.3, 0.4]
-    sgu_mom_lr_list = [0.01, 0.05, 0.1, 0.2]
+    sgu_mom_lr_list = [0.005, 0.007, 0.01, 0.03, 0.05] ##[0.01, 0.05, 0.1, 0.2]
     rmsprop_lr_list = [0.001, 0.0008, 0.0006, 0.0004]
-    lr_decay_list   = [1e-4, 1e-6, 1e-8]
+    lr_decay_list   = [1e-3, 1e-4, 1e-5] #[1e-4, 1e-6, 1e-8]
     decay_list      = [0.9, 0.95, 0.999]
-    mom_list        = [0.9, 0.95, 0.999]
+    mom_list        = [0.9, 0.95, 0.99, 0.999]
     epsilon_list    = [1e-9, 1e-10, 1e-11]
     lambda_list     = [1 - 1e-9, 1 - 1e-10, 1 - 1e-11]
     beta_1_list     = [0, 0.8, 0.9, 0.95]
@@ -52,21 +52,21 @@ def make_tasks(verbose=False):
         if verbose:
             print("{}\t\"{}\"".format(name, desc))
 
-    for index, lr in enumerate(sgu_lr_list):
-        name = "sgu_" + str(index + 1)
-        print_config(name, "lr = {}".format(lr))
+    #for index, lr in enumerate(sgu_lr_list):
+    #    name = "sgu_" + str(index + 1)
+    #    print_config(name, "lr = {}".format(lr))
 
-        tasks.append(Task(name=name, model_dir=model_dir,
-            batch_size=str(batch_size), opt_method="sgu", lr=str(lr)))
+    #    tasks.append(Task(name=name, model_dir=model_dir,
+    #        batch_size=str(batch_size), opt_method="sgu", lr=str(lr)))
 
-    for index, params in enumerate(product(sgu_lr_list, lr_decay_list)):
-        lr, decay = params
-        name = "sgu_lr_decay_" + str(index + 1)
-        print_config(name, "lr = {}, decay = {}".format(lr, decay))
+    #for index, params in enumerate(product(sgu_lr_list, lr_decay_list)):
+    #    lr, decay = params
+    #    name = "sgu_lr_decay_" + str(index + 1)
+    #    print_config(name, "lr = {}, decay = {}".format(lr, decay))
 
-        tasks.append(Task(name=name, model_dir=model_dir,
-            batch_size=str(batch_size), opt_method="sgu",
-            lr=str(lr), lr_sched="gentle_decay", lr_decay=str(decay)))
+    #    tasks.append(Task(name=name, model_dir=model_dir,
+    #        batch_size=str(batch_size), opt_method="sgu",
+    #        lr=str(lr), lr_sched="gentle_decay", lr_decay=str(decay)))
 
     for index, params in enumerate(product(sgu_mom_lr_list, mom_list)):
         lr, mom = params
@@ -87,80 +87,80 @@ def make_tasks(verbose=False):
             lr=str(lr), mom=str(mom), mom_type="nag", lr_sched="gentle_decay",
             lr_decay=str(decay)))
 
-    for index, epsilon in enumerate(epsilon_list):
-        name = "adadelta_eps_" + str(index + 1)
-        print_config(name, "eps = {}".format(epsilon))
+    ##for index, epsilon in enumerate(epsilon_list):
+    ##    name = "adadelta_eps_" + str(index + 1)
+    ##    print_config(name, "eps = {}".format(epsilon))
 
-        tasks.append(Task(name=name, model_dir=model_dir,
-            batch_size=str(batch_size), opt_method="adadelta", lr=str(1),
-            epsilon=str(epsilon)))
+    ##    tasks.append(Task(name=name, model_dir=model_dir,
+    ##        batch_size=str(batch_size), opt_method="adadelta", lr=str(1),
+    ##        epsilon=str(epsilon)))
 
-    for index, decay in enumerate(decay_list):
-        name = "adadelta_decay_" + str(index + 1)
-        print_config(name, "decay = {}".format(decay))
+    ##for index, decay in enumerate(decay_list):
+    ##    name = "adadelta_decay_" + str(index + 1)
+    ##    print_config(name, "decay = {}".format(decay))
 
-        tasks.append(Task(name=name, model_dir=model_dir,
-            batch_size=str(batch_size), opt_method="adadelta",
-            lr=str(1), decay=str(decay), epsilon=str(default_epsilon)))
+    ##    tasks.append(Task(name=name, model_dir=model_dir,
+    ##        batch_size=str(batch_size), opt_method="adadelta",
+    ##        lr=str(1), decay=str(decay), epsilon=str(default_epsilon)))
 
-    for index, params in enumerate(product(decay_list, mom_list)):
-        decay, mom = params
-        name = "adadelta_decay_mom_" + str(index + 1)
-        print_config(name, "decay = {}, mom = {}".format(decay, mom))
+    ##for index, params in enumerate(product(decay_list, mom_list)):
+    ##    decay, mom = params
+    ##    name = "adadelta_decay_mom_" + str(index + 1)
+    ##    print_config(name, "decay = {}, mom = {}".format(decay, mom))
 
-        tasks.append(Task(name=name, model_dir=model_dir,
-            batch_size=str(batch_size), opt_method="adadelta", lr=str(1),
-            decay=str(decay), mom=str(mom), mom_type="nag",
-            epsilon=str(default_epsilon)))
+    ##    tasks.append(Task(name=name, model_dir=model_dir,
+    ##        batch_size=str(batch_size), opt_method="adadelta", lr=str(1),
+    ##        decay=str(decay), mom=str(mom), mom_type="nag",
+    ##        epsilon=str(default_epsilon)))
 
-    for index, epsilon in enumerate(epsilon_list):
-        name = "rmsprop_eps_" + str(index + 1)
-        print_config(name, "eps = {}".format(epsilon))
+    ##for index, epsilon in enumerate(epsilon_list):
+    ##    name = "rmsprop_eps_" + str(index + 1)
+    ##    print_config(name, "eps = {}".format(epsilon))
 
-        tasks.append(Task(name=name, model_dir=model_dir,
-            batch_size=str(batch_size), opt_method="rmsprop",
-            lr=str(default_rmsprop_lr), epsilon=str(epsilon)))
+    ##    tasks.append(Task(name=name, model_dir=model_dir,
+    ##        batch_size=str(batch_size), opt_method="rmsprop",
+    ##        lr=str(default_rmsprop_lr), epsilon=str(epsilon)))
 
-    for index, params in enumerate(product(rmsprop_lr_list, decay_list)):
-        lr, decay = params
-        name = "rmsprop_decay_" + str(index + 1)
-        print_config(name, "lr = {}, decay = {}".format(lr, decay))
+    ##for index, params in enumerate(product(rmsprop_lr_list, decay_list)):
+    ##    lr, decay = params
+    ##    name = "rmsprop_decay_" + str(index + 1)
+    ##    print_config(name, "lr = {}, decay = {}".format(lr, decay))
 
-        tasks.append(Task(name=name, model_dir=model_dir,
-            batch_size=str(batch_size), opt_method="rmsprop",
-            lr=str(lr), decay=str(decay), epsilon=str(default_epsilon)))
+    ##    tasks.append(Task(name=name, model_dir=model_dir,
+    ##        batch_size=str(batch_size), opt_method="rmsprop",
+    ##        lr=str(lr), decay=str(decay), epsilon=str(default_epsilon)))
 
-    for index, params in enumerate(product(rmsprop_lr_list, decay_list, mom_list)):
-        lr, decay, mom = params
-        name = "rmsprop_decay_mom_" + str(index + 1)
-        print_config(name, "lr = {}, decay = {}, mom = {}".format(lr, decay, mom))
+    ##for index, params in enumerate(product(rmsprop_lr_list, decay_list, mom_list)):
+    ##    lr, decay, mom = params
+    ##    name = "rmsprop_decay_mom_" + str(index + 1)
+    ##    print_config(name, "lr = {}, decay = {}, mom = {}".format(lr, decay, mom))
 
-        tasks.append(Task(name=name, model_dir=model_dir,
-            batch_size=str(batch_size), opt_method="rmsprop",
-            lr=str(lr), decay=str(decay), mom=str(mom), mom_type="nag",
-            epsilon=str(default_epsilon)))
+    ##    tasks.append(Task(name=name, model_dir=model_dir,
+    ##        batch_size=str(batch_size), opt_method="rmsprop",
+    ##        lr=str(lr), decay=str(decay), mom=str(mom), mom_type="nag",
+    ##        epsilon=str(default_epsilon)))
 
-    for index, params in enumerate(product(epsilon_list, lambda_list)):
-        epsilon, lambda_ = params
-        name = "adam_eps_lambda_" + str(index + 1)
-        print_config(name, "eps = {}, lambda = {}".format(epsilon, lambda_))
+    ##for index, params in enumerate(product(epsilon_list, lambda_list)):
+    ##    epsilon, lambda_ = params
+    ##    name = "adam_eps_lambda_" + str(index + 1)
+    ##    print_config(name, "eps = {}, lambda = {}".format(epsilon, lambda_))
 
-        tasks.append(Task(name=name, model_dir=model_dir,
-            batch_size=str(batch_size), opt_method="adam",
-            lr=str(default_rmsprop_lr), epsilon=str(epsilon),
-            lambda_=str(lambda_)))
+    ##    tasks.append(Task(name=name, model_dir=model_dir,
+    ##        batch_size=str(batch_size), opt_method="adam",
+    ##        lr=str(default_rmsprop_lr), epsilon=str(epsilon),
+    ##        lambda_=str(lambda_)))
 
-    for index, params in enumerate(product(rmsprop_lr_list, beta_1_list, beta_2_list)):
-        lr, beta_1, beta_2 = params
-        name = "adam_lr_beta1_beta2_" + str(index + 1)
-        print_config(name, "lr = {}, beta_1 = {}, beta_2 = {}".format( \
-            lr, beta_1, beta_2))
+    ##for index, params in enumerate(product(rmsprop_lr_list, beta_1_list, beta_2_list)):
+    ##    lr, beta_1, beta_2 = params
+    ##    name = "adam_lr_beta1_beta2_" + str(index + 1)
+    ##    print_config(name, "lr = {}, beta_1 = {}, beta_2 = {}".format( \
+    ##        lr, beta_1, beta_2))
 
-        tasks.append(Task(name=name, model_dir=model_dir,
-            batch_size=str(batch_size), opt_method="adam",
-            lr=str(lr), epsilon=str(default_epsilon),
-            lambda_=str(default_lambda), beta_1=str(beta_1),
-            beta_2=str(beta_2)))
+    ##    tasks.append(Task(name=name, model_dir=model_dir,
+    ##        batch_size=str(batch_size), opt_method="adam",
+    ##        lr=str(lr), epsilon=str(default_epsilon),
+    ##        lambda_=str(default_lambda), beta_1=str(beta_1),
+    ##        beta_2=str(beta_2)))
 
     return tasks
 
@@ -219,4 +219,6 @@ def finish_remaining_tasks():
 
 # XXX: Edit the self.model_dir line in task.py before starting the script again!
 #finish_remaining_tasks()
-make_tasks(True)
+
+#make_tasks(True)
+start()

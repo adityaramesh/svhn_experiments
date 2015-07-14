@@ -26,12 +26,12 @@ function get_model_info(opt)
 	-- Group 4: 256 * 4^2 -> 1024
 	local fc_inputs = 256 * 4 * 4
 	model:add(nn.View(fc_inputs))
-	--model:add(nn.Dropout(0.7))
+	model:add(nn.Dropout(0.7))
 	model:add(nn.Linear(fc_inputs, 1024))
 	model:add(nn.ReLU())
 
 	-- Group 5: 1024 -> 10
-	--model:add(nn.Dropout(0.7))
+	model:add(nn.Dropout(0.7))
 	model:add(nn.Linear(1024, 10))
 	model:add(nn.LogSoftMax())
 	model:cuda()

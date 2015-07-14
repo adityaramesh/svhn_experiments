@@ -5,18 +5,22 @@ package.path = package.path .. ";./torch_utils/?.lua"
 require "torch_utils/sopt"
 
 function get_train_info(opt)
-	local opt_method = {}
-	if opt.opt_method == "sgu" then
-		opt_method = sopt.sgu
-	elseif opt.opt_method == "adadelta" then
-		opt_method = sopt.adadelta
-	elseif opt.opt_method == "rmsprop" then
-		opt_method = sopt.rmsprop
-	elseif opt.opt_method == "adam" then
-		opt_method = optim.adam
-	else
-		print("Invalid optimization method \"" .. opt.opt_method ..  "\".")
-	end
+	--local opt_method = {}
+	--if opt.opt_method == "sgu" then
+	--	opt_method = sopt.sgu
+	--elseif opt.opt_method == "sgu_eig" then
+	--	opt_method = sopt.sgu_eig
+	--elseif opt.opt_method == "sgu_eig_info" then
+	--	opt_method = sopt.sgu_eig_info
+	--elseif opt.opt_method == "adadelta" then
+	--	opt_method = sopt.adadelta
+	--elseif opt.opt_method == "rmsprop" then
+	--	opt_method = sopt.rmsprop
+	--elseif opt.opt_method == "adam" then
+	--	opt_method = optim.adam
+	--else
+	--	print("Invalid optimization method \"" .. opt.opt_method ..  "\".")
+	--end
 
 	local batch_size = opt.batch_size
 	local learning_rate = opt.learning_rate_schedule == "constant" and
@@ -43,7 +47,7 @@ function get_train_info(opt)
 			beta1 = beta_1,
 			beta2 = beta_2
 		},
-		opt_method = opt_method,
+		--opt_method = opt_method,
 		batch_size = batch_size
 	}
 end
