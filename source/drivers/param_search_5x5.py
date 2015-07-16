@@ -220,5 +220,5 @@ def finish_remaining_tasks():
 # XXX: Edit the self.model_dir line in task.py before starting the script again!
 #finish_remaining_tasks()
 
-#make_tasks(True)
-start()
+make_tasks(True)
+#start()

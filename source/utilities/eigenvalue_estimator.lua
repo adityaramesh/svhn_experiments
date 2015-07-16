@@ -163,13 +163,20 @@ function EigenvalueEstimator.create(model, params, grad_params, grad_func)
 	self.grad_func    = grad_func
 	self.dropout_prob = get_dropout_prob(model)
 
-	self.phi        = torch.CudaTensor(params:size(1))
-	self.init_phi   = torch.randn(params:size(1)):cuda()
-	self.tmp_grad   = torch.CudaTensor(params:size(1))
-	self.tmp_params = torch.CudaTensor(params:size(1))
+	self.phi      = torch.DoubleTensor(params:size(1)) --torch.CudaTensor(params:size(1))
+	self.init_phi = torch.randn(params:size(1)) --:cuda()
+
+	-- Used to store the eigenvector associated with the maximum-magnitude
+	-- eigenvalue when computing the minimum and maximum eigenvalue.
+	--self.tmp_phi    = torch.CudaTensor(params:size(1))
+	--self.tmp_grad   = torch.CudaTensor(params:size(1))
+	--self.tmp_params = torch.CudaTensor(params:size(1))
+	self.tmp_phi    = torch.DoubleTensor(params:size(1))
+	self.tmp_grad   = torch.DoubleTensor(params:size(1))
+	self.tmp_params = torch.DoubleTensor(params:size(1))
 
 	-- Number of iterations of the power method.
-	self.max_power_iters = 5
+	self.max_power_iters = 10
 
 	-- Maximum acceptable tolerance for angle between the eigenvector and
 	-- its product with the Hessian. The current value is actually quite
@@ -193,7 +200,7 @@ function EigenvalueEstimator.create(model, params, grad_params, grad_func)
 	return self
 end
 
-function EigenvalueEstimator:get_max_eigenvalue(input, target, eps)
+function EigenvalueEstimator:compute_max_mag_eig(input, target, eps)
 	-- "Hot-starting" the iterations using the previous value of `phi`
 	-- actually seems to retard progress. Instead, we use the saved value of
 	-- `init_phi`.
@@ -235,20 +242,84 @@ function EigenvalueEstimator:get_max_eigenvalue(input, target, eps)
 end
 
 --
+-- Given the eigenvalue of the largest magnitude, computes either the largest
+-- positive eigenvalue or the largest negative eigenvalue (depending on the sign
+-- of the given eigenvalue). This is done by applying the power method to `(H -
+-- lambda I)`, where `lambda` is the given eigenvalue. As before, the
+-- Hessian-vector products are computed using finite differences.
+--
+function EigenvalueEstimator:compute_extreme_eig(input, target, max_mag_eig, eps)
+	-- "Hot-starting" the iterations using the previous value of `phi`
+	-- actually seems to retard progress. Instead, we use the saved value of
+	-- `init_phi`.
+	self.phi:copy(self.init_phi)
+
+	local proj = 0
+	local skew = 0
+	local norm = 0
+
+	for j = 1, self.max_power_iters do
+		-- Because of finite precision arithmetic, we can't undo the
+		-- action of adding `-eps * phi` to `params` by subtracting the
+		-- same quantity. Instead, we save `params` and restore it after
+		-- bprop.
+		self.params:add(-eps, self.phi)
+		self.grad_func(input, target)
+		self.tmp_grad:copy(self.grad_params)
+
+		self.params:copy(self.tmp_params)
+		self.params:add(eps, self.phi)
+		self.grad_func(input, target)
+		self.params:copy(self.tmp_params)
+		self.grad_params:add(-1, self.tmp_grad):div(2 * eps)
+		self.grad_params:add(-max_mag_eig, self.phi)
+
+		-- How close is `phi` to being an eigenvector?
+		norm = self.grad_params:norm()
+		proj = self.phi:dot(self.grad_params) / norm
+		skew = math.min(math.abs(proj - 1), math.abs(proj + 1))
+		if skew < self.eigvec_skew_tol then break end
+
+		self.phi:copy(self.grad_params)
+		self.phi:div(norm)
+	end
+
+	-- Note: we don't return the eigenvector, because it is already a member
+	-- variable of this class.
+	norm = proj > 0 and norm or -norm
+	return norm + max_mag_eig, skew
+end
+
+function EigenvalueEstimator:check_eig(input, target, eps)
+	self.params:add(-eps, self.phi)
+	self.grad_func(input, target)
+	self.tmp_grad:copy(self.grad_params)
+
+	self.params:copy(self.tmp_params)
+	self.params:add(eps, self.phi)
+	self.grad_func(input, target)
+	self.params:copy(self.tmp_params)
+	self.grad_params:add(-1, self.tmp_grad):div(2 * eps)
+
+	-- How close is `phi` to being an eigenvector?
+	local norm = self.grad_params:norm()
+	local proj = self.phi:dot(self.grad_params) / norm
+	local skew = math.min(math.abs(proj - 1), math.abs(proj + 1))
+
+	-- Note: we don't return the eigenvector, because it is already a member
+	-- variable of this class.
+	norm = proj > 0 and norm or -norm
+	return norm, skew
+end
+
+--
 -- Caution: after this function returns, the gradient parameters of the model
 -- will be in an undefined state. If you wish to preserve the value of the
 -- gradient prior to calling this function, then you will need to save it
 -- explicitly. However, the parameters of the model are guaranteed to be
 -- preserved.
 --
-function EigenvalueEstimator:apply(input, target)
-	self.tmp_params:copy(self.params)
-	change_dropout_prob(self.model, 0)
-
-	local eig_func = function(input, target, eps)
-		return self:get_max_eigenvalue(input, target, eps)
-	end
-
+function EigenvalueEstimator:compute_eig(input, target, eig_func)
 	local eig, best_skew, best_eps = find_eps(eig_func, input, target,
 		self.eps_list, self.eigvec_skew_tol)
 
@@ -260,11 +331,11 @@ function EigenvalueEstimator:apply(input, target)
 		-- `eps` after the refined grid search, then reinitialize
 		-- `init_phi` and try again.
 		for j = 1, 5 do
-			self.init_phi:copy(torch.randn(params:size(1)))
+			self.init_phi:copy(torch.randn(self.params:size(1)))
 
 			local cur_eig, cur_skew, cur_eps =
-				find_eps(self.get_max_eigenvalue, input, target,
-				self.eps_list, self.eigvec_skew_tol)
+				find_eps(eig_func, input, target, self.eps_list,
+				self.eigvec_skew_tol)
 
 			if cur_skew < best_skew then
 				if cur_skew < self.eigvec_skew_tol then
@@ -280,8 +351,97 @@ function EigenvalueEstimator:apply(input, target)
 		end
 	end
 
-	change_dropout_prob(self.model, self.dropout_prob)
-	print("Failed to compute maximum eigenvalue to satisfactory accuracy.")
+	print("Failed to compute eigenvalue to satisfactory accuracy.")
 	print("Best skew: " .. best_skew .. ".")
 	print("Best epsilon: " .. best_eps .. ".")
+end
+
+function EigenvalueEstimator:get_max_mag_eig(input, target)
+	self.tmp_params:copy(self.params)
+	local eig_func = function(input, target, eps)
+		return self:compute_max_mag_eig(input, target, eps)
+	end
+
+	change_dropout_prob(self.model, 0)
+	local eig, _, loss, norm_grad = self:compute_eig(input, target, eig_func)
+	change_dropout_prob(self.model, self.dropout_prob)
+	return eig, self.phi, loss, norm_grad
+end
+
+function EigenvalueEstimator:get_min_max_eig(input, target)
+	self.tmp_params:copy(self.params)
+	local eig_func_1 = function(input, target, eps)
+		local eig, skew = self:compute_max_mag_eig(input, target, eps)
+		print("eig_func_1: ", eps, eig, skew)
+		return eig, skew
+	end
+
+	change_dropout_prob(self.model, 0)
+	local eig_1, _, _, _ = self:compute_eig(input, target, eig_func_1)
+
+	if not eig_1 then
+		change_dropout_prob(self.model, self.dropout_prob)
+		return
+	end
+
+	local eig_func_2 = function(input, target, eps)
+		local eig, skew = self:compute_extreme_eig(input, target, eig_1, eps)
+		print("eig_func_2: ", eps, eig, skew)
+		return eig, skew
+	end
+
+	self.tmp_phi:copy(self.phi)
+	local eig_2, _, _, _ = self:compute_eig(input, target, eig_func_2)
+	
+	print("eig_1: " .. eig_1)
+	print("eig_2: " .. eig_2)
+
+	if not self.poop then
+		self.poop = self.init_phi:clone()
+	else
+		self.poop:copy(self.init_phi)
+	end
+
+	self.init_phi:copy(self.phi)
+
+	local eig_func_3 = function(input, target, eps)
+		local eig, skew = self:compute_max_mag_eig(input, target, eps)
+		print(eps, eig, skew)
+		return eig, skew
+	end
+
+	self:compute_eig(input, target, eig_func_3)
+
+	self.init_phi:copy(self.poop)
+
+	--print("checking eig")
+	--eig_func_3(input, target, self.eps_list[1])
+	--eig_func_3(input, target, self.eps_list[2])
+	--eig_func_3(input, target, self.eps_list[3])
+	--eig_func_3(input, target, self.eps_list[4])
+	--eig_func_3(input, target, self.eps_list[5])
+	--eig_func_3(input, target, self.eps_list[6])
+	--eig_func_3(input, target, self.eps_list[7])
+	--eig_func_3(input, target, self.eps_list[8])
+	--eig_func_3(input, target, self.eps_list[9])
+	--eig_func_3(input, target, self.eps_list[10])
+	--eig_func_3(input, target, self.eps_list[11])
+	--eig_func_3(input, target, self.eps_list[12])
+	--eig_func_3(input, target, self.eps_list[13])
+	--eig_func_3(input, target, self.eps_list[14])
+	--eig_func_3(input, target, self.eps_list[15])
+	--local eig_3, _, _, _ = self:compute_eig(input, target, eig_func_3)
+	--print("eig_3: " .. eig_3)
+
+	change_dropout_prob(self.model, self.dropout_prob)
+
+	if not eig_2 then
+		return eig_1, self.tmp_phi
+	end
+
+	if eig_1 < eig_2 then
+		return eig_1, self.tmp_phi, eig_2, self.phi
+	else
+		return eig_2, self.phi, eig_1, self.tmp_phi
+	end
 end

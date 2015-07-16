@@ -34,10 +34,10 @@ function get_model_info(opt)
 	model:add(nn.Dropout(0.7))
 	model:add(nn.Linear(1024, 10))
 	model:add(nn.LogSoftMax())
-	model:cuda()
+	--model:cuda()
 
 	return {
 		model = model,
-		criterion = nn.ClassNLLCriterion():cuda()
+		criterion = nn.ClassNLLCriterion() --:cuda()
 	}
 end

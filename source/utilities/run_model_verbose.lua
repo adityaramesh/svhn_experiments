@@ -32,14 +32,18 @@ local function sample_max_eigenvalue(data, context, paths, info)
 			table.insert(targets, target)
 		end
 
-		inputs = nn.JoinTable(1):forward(inputs):cuda()
-		targets = nn.JoinTable(1):forward(targets):cuda()
+		inputs = nn.JoinTable(1):forward(inputs) --:cuda()
+		targets = nn.JoinTable(1):forward(targets) --:cuda()
 
-		local eig, _, loss, norm_grad = context.eig_estimator:apply(inputs, targets)
+		--local eig, _, loss, norm_grad = context.eig_estimator:
+		--	get_max_mag_eig(inputs, targets)
+		local eig_1, v1, eig_2, v2 = context.eig_estimator:get_min_max_eig(inputs, targets)
+		print(eig_1, eig_2)
+
 		if eig ~= nil then
-			eigs[#eigs + 1] = eig
-			losses[#losses + 1] = loss
-			grad_norms[#grad_norms + 1] = norm_grad
+			--eigs[#eigs + 1] = eig
+			--losses[#losses + 1] = loss
+			--grad_norms[#grad_norms + 1] = norm_grad
 		end
 	end
 
@@ -82,8 +86,8 @@ local function do_train_epoch(data, context, paths, info)
 			table.insert(targets, target)
 		end
 
-		input = nn.JoinTable(1):forward(inputs):cuda()
-		target = nn.JoinTable(1):forward(targets):cuda()
+		input = nn.JoinTable(1):forward(inputs) --:cuda()
+		target = nn.JoinTable(1):forward(targets) --:cuda()
 		context.optimizer:update(input, target)
 
 		local k = (i - 1) / batch_size + 1
@@ -100,14 +104,14 @@ local function do_train_epoch(data, context, paths, info)
 		-- This allows us to determine whether `k - 1` satisfies the
 		-- desired condition after checking only a few integer values.
 
-		--local qmin = math.floor((k - 1) / math.ceil(iters_per_eig_est))
-		--local qmax = math.ceil((k - 1) / math.floor(iters_per_eig_est))
-		--for q = qmin, qmax do
-		--	if k - 1 == math.floor(q * iters_per_eig_est + 0.5) then
-		--		sample_max_eigenvalue(data, context, paths, info)
-		--		break
-		--	end
-		--end
+		local qmin = math.floor((k - 1) / math.ceil(iters_per_eig_est))
+		local qmax = math.ceil((k - 1) / math.floor(iters_per_eig_est))
+		for q = qmin, qmax do
+			if k - 1 == math.floor(q * iters_per_eig_est + 0.5) then
+				sample_max_eigenvalue(data, context, paths, info)
+				break
+			end
+		end
 
 		context.logger:flush()
 	end
@@ -146,8 +150,8 @@ local function do_valid_epoch(data, context, paths, info)
 			table.insert(targets, target)
 		end
 
-		inputs = nn.JoinTable(1):forward(inputs):cuda()
-		targets = nn.JoinTable(1):forward(targets):cuda()
+		inputs = nn.JoinTable(1):forward(inputs) --:cuda()
+		targets = nn.JoinTable(1):forward(targets) --:cuda()
 		local outputs = model:forward(inputs)
 		confusion:batchAdd(outputs, targets)
 	end
@@ -189,11 +193,9 @@ function make_context(info)
 		return loss
 	end
 
-	context.optimizer = SGUOptimizer.create(
+	context.optimizer = info.train.opt_method.create(
 		model, context.params, context.grad_params, context.grad_func,
-		-- TODO: uncomment this later
-		--info.train.opt_state, context.logger)
-		info.train.opt_state)
+		info.train.opt_state, context.logger)
 	context.eig_estimator = EigenvalueEstimator.create(
 		model, context.params, context.grad_params, context.grad_func)
 
