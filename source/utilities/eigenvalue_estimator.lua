@@ -163,17 +163,15 @@ function EigenvalueEstimator.create(model, params, grad_params, grad_func)
 	self.grad_func    = grad_func
 	self.dropout_prob = get_dropout_prob(model)
 
-	self.phi      = torch.DoubleTensor(params:size(1)) --torch.CudaTensor(params:size(1))
-	self.init_phi = torch.randn(params:size(1)) --:cuda()
+	self.phi      = torch.Tensor():typeAs(params):resizeAs(params)
+	self.init_phi = torch.randn(params:size(1)):typeAs(params)
+	self.init_phi:div(self.init_phi:norm())
 
-	-- Used to store the eigenvector associated with the maximum-magnitude
-	-- eigenvalue when computing the minimum and maximum eigenvalue.
-	--self.tmp_phi    = torch.CudaTensor(params:size(1))
-	--self.tmp_grad   = torch.CudaTensor(params:size(1))
-	--self.tmp_params = torch.CudaTensor(params:size(1))
-	self.tmp_phi    = torch.DoubleTensor(params:size(1))
-	self.tmp_grad   = torch.DoubleTensor(params:size(1))
-	self.tmp_params = torch.DoubleTensor(params:size(1))
+	-- Used to store the eigenvector associated with the maximum magnitude
+	-- eigenvalue when computing the minimum and maximum eigenvalues.
+	self.tmp_phi    = torch.Tensor():typeAs(params):resizeAs(params)
+	self.tmp_grad   = torch.Tensor():typeAs(params):resizeAs(params)
+	self.tmp_params = torch.Tensor():typeAs(params):resizeAs(params)
 
 	-- Number of iterations of the power method.
 	self.max_power_iters = 10
@@ -332,6 +330,7 @@ function EigenvalueEstimator:compute_eig(input, target, eig_func)
 		-- `init_phi` and try again.
 		for j = 1, 5 do
 			self.init_phi:copy(torch.randn(self.params:size(1)))
+			self.init_phi:div(self.init_phi:norm())
 
 			local cur_eig, cur_skew, cur_eps =
 				find_eps(eig_func, input, target, self.eps_list,
@@ -372,7 +371,7 @@ function EigenvalueEstimator:get_min_max_eig(input, target)
 	self.tmp_params:copy(self.params)
 	local eig_func_1 = function(input, target, eps)
 		local eig, skew = self:compute_max_mag_eig(input, target, eps)
-		print("eig_func_1: ", eps, eig, skew)
+		print(eps, eig, skew)
 		return eig, skew
 	end
 
@@ -385,54 +384,11 @@ function EigenvalueEstimator:get_min_max_eig(input, target)
 	end
 
 	local eig_func_2 = function(input, target, eps)
-		local eig, skew = self:compute_extreme_eig(input, target, eig_1, eps)
-		print("eig_func_2: ", eps, eig, skew)
-		return eig, skew
+		return self:compute_extreme_eig(input, target, eig_1, eps)
 	end
 
 	self.tmp_phi:copy(self.phi)
 	local eig_2, _, _, _ = self:compute_eig(input, target, eig_func_2)
-	
-	print("eig_1: " .. eig_1)
-	print("eig_2: " .. eig_2)
-
-	if not self.poop then
-		self.poop = self.init_phi:clone()
-	else
-		self.poop:copy(self.init_phi)
-	end
-
-	self.init_phi:copy(self.phi)
-
-	local eig_func_3 = function(input, target, eps)
-		local eig, skew = self:compute_max_mag_eig(input, target, eps)
-		print(eps, eig, skew)
-		return eig, skew
-	end
-
-	self:compute_eig(input, target, eig_func_3)
-
-	self.init_phi:copy(self.poop)
-
-	--print("checking eig")
-	--eig_func_3(input, target, self.eps_list[1])
-	--eig_func_3(input, target, self.eps_list[2])
-	--eig_func_3(input, target, self.eps_list[3])
-	--eig_func_3(input, target, self.eps_list[4])
-	--eig_func_3(input, target, self.eps_list[5])
-	--eig_func_3(input, target, self.eps_list[6])
-	--eig_func_3(input, target, self.eps_list[7])
-	--eig_func_3(input, target, self.eps_list[8])
-	--eig_func_3(input, target, self.eps_list[9])
-	--eig_func_3(input, target, self.eps_list[10])
-	--eig_func_3(input, target, self.eps_list[11])
-	--eig_func_3(input, target, self.eps_list[12])
-	--eig_func_3(input, target, self.eps_list[13])
-	--eig_func_3(input, target, self.eps_list[14])
-	--eig_func_3(input, target, self.eps_list[15])
-	--local eig_3, _, _, _ = self:compute_eig(input, target, eig_func_3)
-	--print("eig_3: " .. eig_3)
-
 	change_dropout_prob(self.model, self.dropout_prob)
 
 	if not eig_2 then

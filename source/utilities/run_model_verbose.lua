@@ -11,12 +11,12 @@ require "source/utilities/eigenvalue_estimator"
 local function sample_max_eigenvalue(data, context, paths, info)
 	local train_size  = data.inputs:size(1)
 	local batch_size  = info.train.batch_size
+	local params      = context.params
 	local perm        = torch.randperm(train_size)
 
-	local samples    = 100
-	local eigs       = {}
-	local losses     = {}
-	local grad_norms = {}
+	local samples  = 100
+	local min_eigs = {}
+	local max_eigs = {}
 
 	for i = 1, 1 + (samples - 1) * batch_size, batch_size do
 		print("Iteration " .. (i - 1) / batch_size + 1)
@@ -32,24 +32,21 @@ local function sample_max_eigenvalue(data, context, paths, info)
 			table.insert(targets, target)
 		end
 
-		inputs = nn.JoinTable(1):forward(inputs) --:cuda()
-		targets = nn.JoinTable(1):forward(targets) --:cuda()
+		inputs = nn.JoinTable(1):forward(inputs):typeAs(params)
+		targets = nn.JoinTable(1):forward(targets):typeAs(params)
 
-		--local eig, _, loss, norm_grad = context.eig_estimator:
-		--	get_max_mag_eig(inputs, targets)
-		local eig_1, v1, eig_2, v2 = context.eig_estimator:get_min_max_eig(inputs, targets)
+		local eig_1, _, eig_2, _ = context.eig_estimator:
+			get_min_max_eig(inputs, targets)
 		print(eig_1, eig_2)
 
 		if eig ~= nil then
-			--eigs[#eigs + 1] = eig
-			--losses[#losses + 1] = loss
-			--grad_norms[#grad_norms + 1] = norm_grad
+			min_eigs[#min_eigs + 1] = eig_1
+			max_eigs[#max_eigs + 1] = eig_2
 		end
 	end
 
-	context.logger:log_array("max_eigs", eigs)
-	context.logger:log_array("eig_losses", losses)
-	context.logger:log_array("grad_norms", grad_norms)
+	--context.logger:log_array("min_eigs", min_eigs)
+	--context.logger:log_array("max_eigs", max_eigs)
 end
 
 local function do_train_epoch(data, context, paths, info)
@@ -86,8 +83,8 @@ local function do_train_epoch(data, context, paths, info)
 			table.insert(targets, target)
 		end
 
-		input = nn.JoinTable(1):forward(inputs) --:cuda()
-		target = nn.JoinTable(1):forward(targets) --:cuda()
+		input = nn.JoinTable(1):forward(inputs):typeAs(params)
+		target = nn.JoinTable(1):forward(targets):typeAs(params)
 		context.optimizer:update(input, target)
 
 		local k = (i - 1) / batch_size + 1
@@ -132,6 +129,7 @@ local function do_valid_epoch(data, context, paths, info)
 	local criterion  = info.model.criterion
 	local valid_size = data.inputs:size(1)
 	local batch_size = info.train.batch_size
+	local params     = context.params
 	local confusion  = context.confusion
 	model:evaluate()
 
@@ -150,8 +148,8 @@ local function do_valid_epoch(data, context, paths, info)
 			table.insert(targets, target)
 		end
 
-		inputs = nn.JoinTable(1):forward(inputs) --:cuda()
-		targets = nn.JoinTable(1):forward(targets) --:cuda()
+		inputs = nn.JoinTable(1):forward(inputs):typeAs(params)
+		targets = nn.JoinTable(1):forward(targets):typeAs(params)
 		local outputs = model:forward(inputs)
 		confusion:batchAdd(outputs, targets)
 	end
@@ -173,7 +171,7 @@ function make_context(info)
 	local log_dir = "logs"
 	local log_path = paths.concat(log_dir, info.options.model .. "_output.log")
 	context.logger = CSVLogger.create(log_path, {"train_epoch",
-		"train_iter", "max_eigs", "eig_losses", "grad_norms"})
+		"train_iter"}) --, "min_eigs", "max_eigs"})
 		
 	local model = info.model.model
 	local criterion = info.model.criterion
