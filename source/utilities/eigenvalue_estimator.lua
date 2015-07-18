@@ -370,9 +370,7 @@ end
 function EigenvalueEstimator:get_min_max_eig(input, target)
 	self.tmp_params:copy(self.params)
 	local eig_func_1 = function(input, target, eps)
-		local eig, skew = self:compute_max_mag_eig(input, target, eps)
-		print(eps, eig, skew)
-		return eig, skew
+		return self:compute_max_mag_eig(input, target, eps)
 	end
 
 	change_dropout_prob(self.model, 0)

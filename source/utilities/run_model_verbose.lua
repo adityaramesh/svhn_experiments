@@ -101,14 +101,14 @@ local function do_train_epoch(data, context, paths, info)
 		-- This allows us to determine whether `k - 1` satisfies the
 		-- desired condition after checking only a few integer values.
 
-		local qmin = math.floor((k - 1) / math.ceil(iters_per_eig_est))
-		local qmax = math.ceil((k - 1) / math.floor(iters_per_eig_est))
-		for q = qmin, qmax do
-			if k - 1 == math.floor(q * iters_per_eig_est + 0.5) then
-				sample_max_eigenvalue(data, context, paths, info)
-				break
-			end
-		end
+		--local qmin = math.floor((k - 1) / math.ceil(iters_per_eig_est))
+		--local qmax = math.ceil((k - 1) / math.floor(iters_per_eig_est))
+		--for q = qmin, qmax do
+		--	if k - 1 == math.floor(q * iters_per_eig_est + 0.5) then
+		--		sample_max_eigenvalue(data, context, paths, info)
+		--		break
+		--	end
+		--end
 
 		context.logger:flush()
 	end
@@ -191,11 +191,13 @@ function make_context(info)
 		return loss
 	end
 
+	context.eig_estimator = EigenvalueEstimator.create(
+		model, context.params, context.grad_params, context.grad_func)
+	info.train.opt_state.eig_estimator = context.eig_estimator
+
 	context.optimizer = info.train.opt_method.create(
 		model, context.params, context.grad_params, context.grad_func,
 		info.train.opt_state, context.logger)
-	context.eig_estimator = EigenvalueEstimator.create(
-		model, context.params, context.grad_params, context.grad_func)
 
 	context.logger:write_header()
 	return context
